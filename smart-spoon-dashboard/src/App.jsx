@@ -698,7 +698,7 @@ export default function App() {
         fontSize: `${fontSizeMultiplier}rem`
       }}
     >
-      <InstallApp />
+      
       {/* Ambient glassmorphic lighting */}
       {!highContrast && (
         <>
