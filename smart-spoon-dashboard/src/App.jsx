@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import html2canvas from "html2canvas";
+import InstallApp from './components/InstallApp';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, AreaChart, Area
@@ -697,6 +698,7 @@ export default function App() {
         fontSize: `${fontSizeMultiplier}rem`
       }}
     >
+      <InstallApp />
       {/* Ambient glassmorphic lighting */}
       {!highContrast && (
         <>
