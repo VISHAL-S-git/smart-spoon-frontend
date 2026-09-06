@@ -762,7 +762,7 @@ export default function App() {
               {voiceActive ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
               <span>{voiceActive ? (isSpeaking ? "Speaking…" : "Voice ON") : "Voice OFF"}</span>
             </button>
-
+            <InstallApp />
             <ConnectionBadge connectionState={connectionState} t={t} />
           </div>
         </div>
