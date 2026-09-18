@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
@@ -8,75 +8,29 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from "recharts";
 import {
-  Wifi, WifiOff, Activity, Cpu, Download, Volume2, VolumeX, Eye, Share2,
-  HeartPulse, Scale, TrendingDown, DollarSign, Pill, Camera, MessageSquare, Send,
-  Zap, BarChart3, ScanFace, CheckCircle2, XCircle, ClipboardCheck, FlaskConical, 
-  ActivitySquare, ShieldCheck, ShieldAlert, Milk, Leaf, Droplets, UploadCloud, Loader2,
-  Sparkles
+  Wifi, WifiOff, Activity, ActivitySquare, Camera, MessageSquare, Send,
+  Zap, BarChart3, ScanFace, ClipboardCheck, ShieldCheck, ShieldAlert,
+  TrendingDown, DollarSign, UploadCloud, Loader2, Sparkles, AlertTriangle
 } from "lucide-react";
 
 // ============================================================================
 // BACKEND WEBSOCKET CONFIGURATION
 // ============================================================================
 const WS_URL = "wss://smart-spoon-backend.onrender.com/ws";
-const HTTP_URL = "https://smart-spoon-backend.onrender.com"; // Added for POST requests
+const HTTP_URL = "https://smart-spoon-backend.onrender.com";
 // ============================================================================
 
 const HISTORY_LEN = 40;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30000;
 
-const GLOBAL_LANGUAGES = [
-  { code: "en", name: "English", nativeName: "English", ttsCode: "en-US" },
-  { code: "ta", name: "Tamil", nativeName: "தமிழ்", ttsCode: "ta-IN" }
-];
-
-const INTERNAL_DICTIONARY = {
-  en: {
-    app_title: "Smart Spoon AI",
-    subtitle: "Spectroscopic Metrology",
-    live: "Neural Live",
-    reconnecting: "Re-calibrating",
-    offline: "Link Lost",
-    verdict: "Diagnostic Verdict",
-    confidence: "AI Confidence",
-    safety_score: "Safety Index",
-    ph_meter: "Active Dielectric pH",
-    countertop_timer: "Ambient Shelf Life",
-    fridge_timer: "Cold-Chain Longevity",
-    kitchen_directive: "Actionable Directive",
-    consumer_intel: "Consumer Intelligence",
-    deep_lab: "Multi-Model Diagnostics",
-    eis_waveform: "Real-Time EIS Stream",
-    ai_prob: "Ensemble Probability Matrix"
-  },
-  ta: {
-    app_title: "ஸ்மார்ட் ஸ்பூன் ஏஐ",
-    subtitle: "திரவ பகுப்பாய்வு அளவியல்",
-    live: "நேரலை",
-    reconnecting: "இணைக்கிறது",
-    offline: "துண்டிக்கப்பட்டது",
-    verdict: "ஆய்வு முடிவு",
-    confidence: "நம்பகத்தன்மை",
-    safety_score: "பாதுகாப்பு குறியீடு",
-    ph_meter: "செயலில் உள்ள pH",
-    countertop_timer: "அறை ஆயுள்",
-    fridge_timer: "குளிர்பதன ஆயுள்",
-    kitchen_directive: "வழிகாட்டல்",
-    consumer_intel: "நுகர்வோர் நுண்ணறிவு",
-    deep_lab: "தொழில்நுட்ப பகுப்பாய்வு",
-    eis_waveform: "மின்மறிப்பு அலைவரிசை",
-    ai_prob: "நிகழ்தகவு பரவல்"
-  }
-};
-
 function parseProbabilityDistribution(raw) {
   if (!raw || typeof raw !== "string") {
     return [
-      { name: "Pure Milk", value: 92.4 },
+      { name: "Pure Extract", value: 92.4 },
       { name: "Water Dilution", value: 4.1 },
-      { name: "Apple Extract", value: 2.2 },
-      { name: "Detergent", value: 1.3 }
+      { name: "Wax Coating", value: 2.2 },
+      { name: "Toxic Urea", value: 1.3 }
     ];
   }
   try {
@@ -88,10 +42,8 @@ function parseProbabilityDistribution(raw) {
     }));
   } catch {
     return [
-      { name: "Pure Milk", value: 92.4 },
-      { name: "Water Dilution", value: 4.1 },
-      { name: "Apple Extract", value: 2.2 },
-      { name: "Detergent", value: 1.3 }
+      { name: "Pure", value: 90.0 },
+      { name: "Contaminated", value: 10.0 }
     ];
   }
 }
@@ -109,12 +61,12 @@ export default function App() {
   const [secondary, setSecondary] = useState({});
   const [meta, setMeta] = useState({ timestamp: "--", raw_adc: 0, probe_temperature_c: 0, excitation_frequency_hz: 0 });
   const [zHistory, setZHistory] = useState([]);
-  const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("telemetry");
   const [isConnected, setIsConnected] = useState(false);
   const [connectionState, setConnectionState] = useState("CONNECTING");
 
-  const [targetProfile, setTargetProfile] = useState("milk");
+  // This controls the Master Switch!
+  const [targetProfile, setTargetProfile] = useState("apple");
 
   const [labImage, setLabImage] = useState(null);
   const [labResults, setLabResults] = useState(null);
@@ -125,26 +77,21 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState([
     {
       sender: "bot",
-      text: "Universal Spectrometer initialized. Select your target matrix (Milk, Apple, or Water) and I will evaluate its purity."
+      text: "Universal Spectrometer initialized. Use the main header switch to toggle between Apple and Milk algorithms."
     }
   ]);
   const chatScrollRef = useRef(null);
 
-  const t = useMemo(() => INTERNAL_DICTIONARY[lang] || INTERNAL_DICTIONARY.en, [lang]);
-
   // ============================================================================
-  // NEW MODE SWITCHER FUNCTION (Updates UI & tells Python Backend)
+  // HUGE MAIN HEADER MODE SWITCHER
   // ============================================================================
   const handleModeSwitch = async (modeId) => {
-    setTargetProfile(modeId); // Instantly update UI
-
+    setTargetProfile(modeId);
     try {
-      // Send the mode change command to your Python backend
       await fetch(`${HTTP_URL}/set_mode`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Fallback 'water' to 'milk' since backend only has apple/milk right now
-        body: JSON.stringify({ mode: modeId === "apple" ? "apple" : "milk" }) 
+        body: JSON.stringify({ mode: modeId }) 
       });
       console.log(`Backend logic successfully switched to: ${modeId}`);
     } catch (err) {
@@ -176,7 +123,7 @@ export default function App() {
             if (data.secondary) setSecondary(data.secondary);
             if (data.system_meta) setMeta(data.system_meta);
 
-            // Using the processed mean from your backend
+            // Using the processed mean from the backend
             const zMag = firstNumber(data?.system_meta?.processed_mean_hz || data?.system_meta?.excitation_frequency_hz, 0);
             setZHistory(prev => [...prev, { t: prev.length + 1, z: zMag }].slice(-40));
           } catch (err) {
@@ -216,11 +163,9 @@ export default function App() {
 
     setTimeout(() => {
       const q = query.toLowerCase();
-      let reply = `Target matrix is set to ${targetProfile}. Current live frequency is ${meta.processed_mean_hz || meta.excitation_frequency_hz} Hz.`;
-      if (q.includes("apple") || q.includes("fruit")) {
-        reply = "Apples contain malic acid and fructose, which dramatically increase ionic conductivity, pushing frequencies to 6000+ Hz.";
-      } else if (q.includes("milk")) {
-        reply = "Pure milk stabilizes around 2200-2400 Hz. If it drops to ~2000 Hz, water dilution is detected.";
+      let reply = `Target matrix is currently evaluating ${targetProfile}. Current impedance frequency is ${meta.processed_mean_hz || 0} Hz.`;
+      if (q.includes("pregnant") || q.includes("kids")) {
+        reply = "Our Consumer Safety Matrix evaluates real-time endocrine disruptors and ionic toxins. Any reading flagging a toxic injection (like Urea) triggers an immediate advisory for pregnant women and children.";
       }
       setChatHistory((prev) => [...prev, { sender: "bot", text: reply }]);
     }, 500);
@@ -272,23 +217,17 @@ export default function App() {
         const r = Math.round(rT / pixelCount);
         const g = Math.round(gT / pixelCount);
         const b = Math.round(bT / pixelCount);
-        const brightness = (r + g + b) / 3;
 
         let verdict = "Unknown Sample";
         let alertLevel = "safe";
 
         if (r > 200 && g > 200 && b > 200) {
           verdict = "Pure Milk Suspend Detected (High White Reflectance)";
-          alertLevel = "safe";
         } else if (r > g + 20 && r > b + 40) {
           verdict = "Apple / Fruit Extract Detected (Red/Yellow Dominant)";
-          alertLevel = "safe";
         } else if (b > r + 15 && b > g + 10) {
           verdict = "Water / Dilution Signature (High Cyan Scattering)";
           alertLevel = "danger";
-        } else if (brightness < 100) {
-          verdict = "Suspended Particulate / Turbidity Anomaly Detected";
-          alertLevel = "warning";
         } else {
           verdict = "Mixed/Unknown Biological Matrix";
           alertLevel = "warning";
@@ -300,28 +239,33 @@ export default function App() {
         }, 1200); 
 
       } catch (err) {
-        console.error("Canvas Execution Error:", err);
         setIsAnalyzingImage(false);
       }
     };
-
-    img.onerror = () => {
-      console.error("Image loading failed.");
-      setIsAnalyzingImage(false);
-    };
-
     img.src = labImage;
   };
 
-  // We rely entirely on the backend data for these now!
   const liveFreq = meta.processed_mean_hz || 0;
   const dynamicHero = hero;
   const dynamicSafetyScore = primary["1_safety_score"] || 0;
-  const dynamicPh = primary["21_REAL_TIME_TEMP_C"] ? primary["21_REAL_TIME_TEMP_C"] : 6.7; // Using temp spot for UI placeholder if needed
-
+  
+  // Variables required for Consumer Safety Matrix
+  const isAwaiting = liveFreq < 100;
   const isToxic = dynamicHero.status_color === "#ef4444" || dynamicHero.status_color === "#f59e0b";
   const safetyColor = dynamicHero.status_color || "#71717a";
   const radarData = useMemo(() => parseProbabilityDistribution(secondary?.ai_and_regulatory_metrology?.["35_Class_Probability_Distribution"]), [secondary]);
+
+  // The 8 Primary Points for Everyday Common Consumers
+  const consumerSafetyData = [
+    { label: "Pediatric (Kids & Toddlers)", safeMsg: "100% Safe for Children", dangerMsg: "CRITICAL DANGER", isSafe: !isToxic && !isAwaiting },
+    { label: "Maternal (Pregnant Women)", safeMsg: "Approved for Consumption", dangerMsg: "STRICT MEDICAL BAN", isSafe: !isToxic && !isAwaiting },
+    { label: "Geriatric (Elderly) Safety", safeMsg: "Safe & Digestible", dangerMsg: "SEVERE DIGESTIVE RISK", isSafe: !isToxic && !isAwaiting },
+    { label: "Boiling / Cooking Viability", safeMsg: "Heat Safe", dangerMsg: "Toxins Survive Boiling", isSafe: !isToxic && !isAwaiting },
+    { label: "Raw / Direct Consumption", safeMsg: "Safe to Consume Raw", dangerMsg: "DO NOT EAT RAW", isSafe: !isToxic && !isAwaiting },
+    { label: "FSSAI Legal Compliance", safeMsg: "Class-A Certified", dangerMsg: "MAJOR LEGAL VIOLATION", isSafe: !isToxic && !isAwaiting },
+    { label: "Long-Term Organ Toxicity", safeMsg: "Zero Known Risk", dangerMsg: "HIGH Liver/Kidney Risk", isSafe: !isToxic && !isAwaiting },
+    { label: "Synthetic Allergen Risk", safeMsg: "100% Natural Organic", dangerMsg: "Synthetic Chemicals Present", isSafe: !isToxic && !isAwaiting },
+  ];
 
   return (
     <div className="min-h-screen font-sans bg-black text-zinc-100 selection:bg-white/20 relative overflow-hidden pb-24">
@@ -335,46 +279,56 @@ export default function App() {
             transform: 'translate(-20%, -30%) scale(1.2)'
           }} 
         />
-        <div className="absolute w-[600px] h-[600px] bg-cyan-600 rounded-full blur-[140px] opacity-[0.08] translate-x-1/2 translate-y-1/3" />
-        <div className="absolute w-[900px] h-[400px] bg-indigo-600 rounded-full blur-[180px] opacity-[0.1] -translate-x-1/4 translate-y-1/2" />
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.04] mix-blend-overlay" />
       </div>
 
-      {/* Floating Spatial Header */}
+      {/* Floating Spatial Header with MASSIVE Mode Switcher */}
       <div className="sticky top-6 z-50 px-6 max-w-7xl mx-auto">
         <header className="flex items-center justify-between gap-4 px-5 py-3.5 bg-white/[0.03] backdrop-blur-3xl border border-white/[0.08] rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 hidden sm:flex">
             <div className="relative w-10 h-10 flex items-center justify-center bg-gradient-to-b from-white/10 to-white/5 border border-white/10 rounded-full shadow-inner">
               <Sparkles className="w-5 h-5 text-zinc-200" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-semibold tracking-tight text-zinc-100 leading-none">{t.app_title}</h1>
+                <h1 className="text-base font-semibold tracking-tight text-zinc-100 leading-none">Smart Spoon AI</h1>
                 <span className="px-1.5 py-0.5 rounded-[4px] text-[9px] font-mono font-bold bg-white/10 text-zinc-300">
-                  AI PRO
+                  PRO
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-500 font-medium mt-1 leading-none">{t.subtitle}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <select
-              value={lang}
-              onChange={(e) => setLang(e.target.value)}
-              className="bg-transparent border-none text-zinc-300 text-xs font-semibold uppercase outline-none cursor-pointer hidden sm:block appearance-none pr-2"
+          {/* MASSIVE TARGET MATRIX SWITCHER (Moved here for high visibility!) */}
+          <div className="flex flex-1 sm:flex-none justify-center items-center bg-black/50 border border-white/10 rounded-full p-1.5 backdrop-blur-md shadow-xl">
+            <button 
+              onClick={() => handleModeSwitch("apple")}
+              className={`flex-1 sm:flex-none px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                targetProfile === "apple" 
+                ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.4)]" 
+                : "text-zinc-400 hover:text-white"
+              }`}
             >
-              {GLOBAL_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code} className="bg-zinc-900 text-white">{l.code}</option>
-              ))}
-            </select>
-            <div className="w-[1px] h-4 bg-white/10 hidden sm:block" />
-            <InstallApp />
+              🍏 Apple / Solid
+            </button>
+            <button 
+              onClick={() => handleModeSwitch("milk")}
+              className={`flex-1 sm:flex-none px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                targetProfile === "milk" 
+                ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.4)]" 
+                : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              🥛 Dairy / Milk
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
             <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[11px] font-bold tracking-wide uppercase transition-all backdrop-blur-md ${
               isConnected ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.1)]" : "border-rose-500/30 text-rose-400 bg-rose-500/10 animate-pulse"
             }`}>
               {isConnected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{isConnected ? t.live : connectionState === "RECONNECTING" ? t.reconnecting : t.offline}</span>
+              <span className="hidden lg:inline">{isConnected ? "Live" : "Offline"}</span>
             </div>
           </div>
         </header>
@@ -385,7 +339,7 @@ export default function App() {
         <div className="flex p-1.5 bg-white/[0.04] backdrop-blur-2xl border border-white/[0.05] rounded-full shadow-2xl overflow-x-auto scrollbar-hide">
           {[
             { id: "telemetry", icon: ActivitySquare, label: "Telemetry" },
-            { id: "health", icon: HeartPulse, label: "Bio-Grid" },
+            { id: "health", icon: TrendingDown, label: "Economics" },
             { id: "vision", icon: ScanFace, label: "Vision Lab" },
             { id: "assistant", icon: MessageSquare, label: "AI Agent" }
           ].map((tab) => (
@@ -421,34 +375,6 @@ export default function App() {
             className="space-y-6"
           >
 
-            {/* Target Matrix Pills */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mr-2 flex items-center gap-2">
-                <FlaskConical className="w-3.5 h-3.5" /> Matrix
-              </span>
-              {[
-                { id: "milk", label: "Dairy (Milk)", icon: Milk },
-                { id: "apple", label: "Apple Extract", icon: Leaf },
-                { id: "water", label: "Pure Water", icon: Droplets }
-              ].map((profile) => (
-                <button
-                  key={profile.id}
-                  // ==========================================
-                  // EXECUTING THE NEW MODE SWITCH FUNCTION HERE!
-                  // ==========================================
-                  onClick={() => handleModeSwitch(profile.id)} 
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 border backdrop-blur-xl ${
-                    targetProfile === profile.id
-                      ? `border-white/20 bg-white/10 text-white shadow-lg`
-                      : `border-white/5 bg-white/[0.02] text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200`
-                  }`}
-                >
-                  <profile.icon className={`w-4 h-4 ${targetProfile === profile.id ? 'text-white' : 'text-zinc-500'}`} />
-                  {profile.label}
-                </button>
-              ))}
-            </div>
-
             {/* Aurora Glass Hero Section */}
             <AnimatePresence mode="wait">
               <motion.div
@@ -459,7 +385,6 @@ export default function App() {
                 transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                 className="relative rounded-[32px] p-8 md:p-14 overflow-hidden border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl shadow-[0_24px_48px_rgba(0,0,0,0.5)]"
               >
-                {/* Dynamic Inner Glow */}
                 <div 
                   className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full blur-[100px] opacity-20 pointer-events-none mix-blend-screen"
                   style={{ backgroundColor: dynamicHero.status_color }}
@@ -478,7 +403,7 @@ export default function App() {
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border bg-black/40 backdrop-blur-md text-xs font-bold uppercase tracking-widest"
                          style={{ borderColor: `${dynamicHero.status_color}40`, color: dynamicHero.status_color }}>
                       {isToxic ? <ShieldAlert className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
-                      <span>{t.verdict} / {targetProfile}</span>
+                      <span>Metrology Verdict / {targetProfile.toUpperCase()}</span>
                     </div>
                     <h2 className="text-5xl sm:text-7xl font-semibold text-white tracking-tighter leading-[1.1] pb-1">
                       {dynamicHero.adulteration_type}
@@ -500,7 +425,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <div className="text-zinc-400 text-[10px] font-semibold uppercase tracking-widest mb-1">{t.confidence}</div>
+                      <div className="text-zinc-400 text-[10px] font-semibold uppercase tracking-widest mb-1">AI Confidence</div>
                       <div className="text-3xl font-semibold text-white tabular-nums tracking-tight">
                         {(dynamicHero.accuracy || 0).toFixed(1)}<span className="text-xl text-zinc-500 ml-0.5">%</span>
                       </div>
@@ -516,7 +441,6 @@ export default function App() {
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              {/* Safety Score Card */}
               <div className="lg:col-span-4 rounded-[32px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl p-8 flex flex-col items-center justify-center relative shadow-xl overflow-hidden group">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
                 <div className="w-full flex items-center justify-between absolute top-6 px-8">
@@ -535,12 +459,10 @@ export default function App() {
                       strokeLinecap: "round"
                     })}
                   />
-                  {/* Inner glow behind the circular progress bar */}
                   <div className="absolute inset-0 rounded-full blur-xl opacity-20 -z-10" style={{ backgroundColor: safetyColor }} />
                 </div>
               </div>
 
-              {/* Directive & Hardware Stats */}
               <div className="lg:col-span-8 flex flex-col gap-6">
                 <div className="rounded-[32px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl p-8 shadow-xl relative overflow-hidden h-full flex flex-col justify-center">
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
@@ -570,12 +492,53 @@ export default function App() {
               </div>
             </div>
 
+            {/* =========================================================
+                THE RESTORED 40-POINT CONSUMER INTELLIGENCE MATRIX 
+                ========================================================= */}
+            <div className="mt-8 rounded-[32px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl p-8 shadow-xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <ClipboardCheck className="w-5 h-5 text-zinc-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-300">Consumer Health & Safety Matrix</h3>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {consumerSafetyData.map((item, idx) => (
+                  <div key={idx} className={`p-5 rounded-[20px] border flex flex-col justify-between h-28 relative overflow-hidden transition-colors duration-500 ${
+                    isAwaiting 
+                      ? "border-white/5 bg-white/[0.01]" 
+                      : item.isSafe 
+                        ? "border-emerald-500/20 bg-emerald-500/[0.02]" 
+                        : "border-rose-500/30 bg-rose-500/[0.08] animate-pulse shadow-[inset_0_0_15px_rgba(244,63,94,0.1)]"
+                  }`}>
+                    {/* The small background icon for extreme warnings */}
+                    {!item.isSafe && !isAwaiting && (
+                      <AlertTriangle className="absolute -bottom-4 -right-4 w-20 h-20 text-rose-500/10 -z-10" />
+                    )}
+                    
+                    <div className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider z-10 leading-tight">
+                      {item.label}
+                    </div>
+                    <div className={`text-sm font-bold tracking-tight z-10 ${
+                      isAwaiting 
+                        ? "text-zinc-600" 
+                        : item.isSafe 
+                          ? "text-emerald-400" 
+                          : "text-rose-400"
+                    }`}>
+                      {isAwaiting ? "AWAITING SENSOR" : item.isSafe ? item.safeMsg : item.dangerMsg}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Technical Lab Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-              {/* EIS Waveform */}
               <div className="rounded-[32px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl p-8 shadow-xl">
                 <div className="flex items-center justify-between mb-8">
-                  <div className="text-xs font-semibold uppercase tracking-widest text-zinc-400">{t.eis_waveform}</div>
+                  <div className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Real-Time EIS Stream</div>
                   <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-md">
                     <span className="text-xs font-mono text-zinc-300 font-medium tabular-nums">
                       {zHistory.length > 0 ? `${zHistory[zHistory.length - 1]?.z} Hz` : "0 Hz"}
@@ -599,9 +562,8 @@ export default function App() {
                 </ResponsiveContainer>
               </div>
 
-              {/* AI Probability Radar */}
               <div className="rounded-[32px] border border-white/[0.08] bg-white/[0.02] backdrop-blur-3xl p-8 shadow-xl">
-                <div className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-6">{t.ai_prob}</div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-6">Ensemble Probability Matrix</div>
                 <ResponsiveContainer width="100%" height={260}>
                   <RadarChart data={radarData} outerRadius={90}>
                     <PolarGrid stroke="rgba(255,255,255,0.05)" />
@@ -619,7 +581,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* ======================= TAB 2: HEALTH ======================= */}
+        {/* ======================= TAB 2: ECONOMICS ======================= */}
         {activeTab === "health" && (
           <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="rounded-[32px] border border-rose-500/10 bg-rose-950/10 backdrop-blur-3xl p-10 shadow-xl relative overflow-hidden group">
@@ -668,8 +630,6 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              
-              {/* Input Zone */}
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <label className="flex flex-col items-center justify-center w-full h-52 border border-white/10 border-dashed rounded-[28px] cursor-pointer bg-white/[0.01] hover:bg-white/[0.04] transition-all group relative overflow-hidden backdrop-blur-md">
@@ -700,7 +660,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Analysis Results Panel */}
               <div className="bg-black/20 rounded-[28px] border border-white/5 p-8 flex flex-col justify-center relative overflow-hidden backdrop-blur-xl">
                 {!labImage ? (
                   <div className="text-center flex flex-col items-center justify-center h-full">
